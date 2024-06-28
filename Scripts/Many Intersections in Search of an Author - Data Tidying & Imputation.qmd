@@ -1,0 +1,1964 @@
+---
+title: "Many Intersections in Search of an Author"
+subtitle: "Data Tidying & Imputation"
+title-block-banner: "#A31621"
+author:
+  - Mattia Guarnerio (UvA, 14350920)
+format: html
+toc: true
+toc-location: body
+fig-cap-location: top
+number_sections: true
+embed_resources: true
+pdf: default
+docx: default
+bibliography: manyintersections.bib
+csl: apa.csl
+editor: visual
+date: now
+eval: true
+echo: false
+warning: false
+---
+
+```{r setup, include = FALSE}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/Mattia aka Mario/Desktop/UvA/Second Year/Thesis (S. Steinmetz)")
+```
+
+## 1. Abstract
+
+While *human capital theory* provides key insights into *school-to-work transitions*, it attributes little conceptual relevance to interdependencies between multiply marginalised social identities. This study calls upon intersectional social reproduction feminism to assess intersectional inequalities in material outcomes of school-to-work transitions in Germany.
+
+Leveraging data from Wave 9 of the *Children of Immigrants Longitudinal Survey in Four European Countries* (CILS4EU-DE), I evaluate the joint impact of *parental social class*, *gender*, *migration background*, and *educational track* on *job security* and *early career returns*. The intersectional *Multilevel Analysis of Individual Heterogeneity and Discriminatory Accuracy (MAIHDA)* framework is introduced to systematically distinguish between multiplicative and additive inequalities.
+
+Empirical findings show substantial inequalities in job security and early career returns among German youth, aligning with human capital theory for job security while supporting social reproduction feminism for early career returns. However, the observed effects are primarily *additive* rather than *multiplicative*. This suggests that although lived experiences of multiply marginalised social groups in school-to-work transitions are unique, their material impact on job security and early career returns is uniform across intersectional social positions in parental social class, gender, migration background, and educational track.
+
+Future sociological research may exploit large-scale population register datasets in developing longitudinal and causal extensions for intersectional MAIHDA.
+
+## 2. Research Questions
+
+**Research Question 1 (RQ1):** To what extent does belonging to social categories of parental social class, gender, ethnic background, and educational track predict German young adults’ material outcomes in job security and early career earnings in their school-to-work transitions?
+
+**Research Question 2 (RQ2):** To what extent do intersections, or multiplicative interactions, of social categories of parental social class, gender, ethnic background, and educational track contribute incrementally to explaining German young adults’ material outcomes in job security and early career earnings in their school-to-work transitions?
+
+**Research Question 3 (RQ3):** In the context of school-to-work transitions in Germany, to what extent do multiply marginalized intersectional social positions in parental social class, gender, ethnic background, and educational track experience disadvantages in job security and early career earnings that exceed the additive effects of each social category?
+
+## 3. Preliminary steps
+
+### 3.1 ✧ Installing packages and loading the necessary libraries
+
+To get started, the necessary R [@r_core_team_r_2021] `version 4.3.2` packages must be loaded from the library into the environment. Notable required extensions for tidying and imputing data from CILS4EU-DE [@kalter_children_2024] are:
+
+1.  `tidyverse` [@wickham_welcome_2019] version 3.16.0, for data tidying, wrangling, and visualisation, including `haven` [@wickham_haven_2023] version 2.5.4 and `ggplot2` [@wickham_ggplot2_2016] version 3.5.1.
+
+2.  `mice` [@van_buuren_mice_2011] version 3.16.0, for *Multivariate Imputation by Chained Equations* (MICE).
+
+3.  `ggmice` [@oberman_ggmice_2023] version 0.1.0.9000, for generating visualisations for MICE with `ggplot2`.
+
+4.  `reshape2` [@hadley_wickham_reshape2_2020] version 1.4.4, for data wrangling in helper functions for MICE diagnostics.
+
+5.  `RColorBrewer` [@neuwirth_rcolorbrewer_2022] version 1.1-3, for colour palettes in helper functions for MICE diagnostics.
+
+6.  `mitools` [@thomas_lumley_mitools_2019] version 2.4, for computing post-imputation descriptive statistics for the CILS4EU-DE analytic sample.
+
+7.  `miceadds` [@robitzsch_miceadds_2024] version 3.18-20, for computing post-imputation descriptive statistics for the CILS4EU-DE analytic sample.
+
+The `knitr` option `include = FALSE` is set whenever the output of a chunk should not be included in the compiled Quarto project.
+
+```{r, include = FALSE}
+library(tidyverse)
+library(haven)
+library(mice)
+library(ggmice)
+library(reshape2)
+library(RColorBrewer)
+library(mitools)
+library(miceadds)
+```
+
+### 3.2 ✧ Importing the data
+
+The CILS4EU-DE data can be imported using the `read_dta` function from `haven`. Several chunks in this Quarto project refer to the folder containing CILS4EU-DE data, which unfortunately are not open source.
+
+The post-imputation and post-strata building analytic samples (N = 2395) sourced from Wave 9 (2022) of CILS4EU-DE for reproducing MCMC estimations are freely available [here](https://github.com/MattiaGuarnerio/Many-Intersections/).
+
+Time-invariant information for strata building on the panel and refreshment samples of CILS4EU-DE are recovered from previous waves of CILS4EU-DE, that is, Wave 1 (2011), Wave 2 (2012), Wave 3 (2013), Wave 6 (2018), and Wave 8 (2020), as well as the Life History Calendar (LHC) administered in Wave 6 (2018).
+
+```{r, include = FALSE}
+# Wave 1, selecting unique youth IDs and variables for parental ISEI and migration background.
+
+d1 <- read_dta("Data/CILS4EU/Stata/youth main/w1_ym_ge_v1.2.0_rv.dta") |>
+  select(youthid, y1_iseifG, y1_iseimG, y1_generationG) 
+
+# Wave 2, selecting unique youth IDs and variables for parental ISEI and migration background.
+
+# Curiously, there is one single youth for which generation is only measured in Wave 2.
+
+d2 <- read_dta("Data/CILS4EU/Stata/youth main/w2_ym_ge_v2.3.0_rv.dta") |> select(youthid, y2_generationG)
+  
+# Wave 3, selecting unique youth IDs and variables for parental ISEI and migration background.
+
+d3 <- read_dta("Data/CILS4EU/Stata/youth main/w3_ym_ge_v3.3.0_rv.dta") |> select(youthid, y3_iseifG, y3_iseimG, y3_generationG)
+
+# Wave 6, selecting unique youth IDs and variables for parental ISEI, gender, and migration background.
+
+d6 <- read_dta("Data/CILS4EU-DE/Stata/w6_ym_ge_v7.0.0_rv.dta") |> select(youthid, y6_iseifG, y6_iseimG, y6_sex, y6_generationG)
+
+# Wave 9, selecting unique youth IDs, outcome variables, and variables for whether the respondent is in full-time or part-time employment, parental ISEI, gender, migration background, and secondary school educational track.
+
+d9 <- read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |> select(youthid, y9_csit4H, y9_w_cont4, y9_w_incCS, y9_sex, y9_hgendeg)
+
+# Wave 6 LHC, selecting unique youth IDs and variables for secondary high school educational track.
+
+lhc_wave6 <- read_dta("Data/CILS4EU-DE/Stata/w6_ylhcs_ge_v7.0.0_rv.dta") |> select(youthid, y6_ylhcs_begdatm, y6_ylhcs_begdaty, y6_s1_grad3, y6_s1_g_educ2)
+
+```
+
+## 4. Preparing and pre-processing the data
+
+### 4.1 ✧ Selecting the analytic sample and joining the data
+
+Respondents not in full-time or part-time employment must be filtered from Wave 9 of CILS4EU-DE. The resulting analytic sample (N = 2395) is joined with data from Wave 1, Wave 2, Wave 3, Wave 6. All missing values are set to `NA`.
+
+```{r, include = FALSE}
+# Retaining respondents in full-time or part-time employment (y9_csit4H == 4).
+d <- d9 |> filter(y9_csit4H == 4) |>
+  left_join(d1, by = "youthid") |> # Wave 1 join.
+  left_join(d2, by = "youthid") |> # Wave 2 join.
+  left_join(d3, by = "youthid") |> # Wave 3 join.
+  left_join(d6, by = "youthid") |> # Wave 6 join.
+  mutate_all(~ ifelse(. %in% c(-99, -88, -77, -66, -55, -44, -33, -22), NA, .))
+
+# Removing the original Wave 1, Wave 2, Wave 3, Wave 6, and Wave 9 data to keep the environment clean.
+rm(d1, d2, d3, d6, d9)
+
+# Releasing the unused memory to keep the environment clean.
+gc()
+
+```
+
+### 4.2 ✧ Recovering information from multiple CILS4EU / CILS4EU-DE waves
+
+For all missing values of time-invariant strata building variables, that is, parental International Socio-Economic Index of occupational status (ISEI) [\# @ganzeboom_standard_1992], gender, and migration background, information is recovered starting from the earliest waves. This is clearly the best choice as opposed to immediately imputing incomplete cases with MICE, since background information on parental ISEI, gender, and migration background of CILS4EU-DE respondents is time-invariant.
+
+Information on secondary school educational track for 79 respondents is recovered from the LHC administered in Wave 6. Then, all outcome and strata building variables are converted from the numeric to the factor (categorical) format, assigning appropriate custom labels for each category.
+
+If migration background is still unclear after recovering information from previous waves, it is set as `NA` as incomplete information cannot be used for MICE imputation. Lastly, information on parental ISEI for mothers and fathers of respondents is combined into a single variable measuring the highest parental ISEI.
+
+```{r, include = FALSE}
+# Recovering information of parental ISEI, gender, and migration background.
+
+d <- d |> mutate(
+    # Parental ISEI (mother).
+    y9_iseimG = case_when(
+      !is.na(y1_iseimG) ~ y1_iseimG,
+      is.na(y1_iseimG) & !is.na(y3_iseimG) ~ y3_iseimG,
+      is.na(y1_iseimG) & is.na(y3_iseimG) & !is.na(y6_iseimG)~ y6_iseimG,
+      TRUE ~ NA
+      ),
+    
+    # Parental ISEI (father).
+    y9_iseifG = case_when(
+      !is.na(y1_iseifG) ~ y1_iseifG,
+      is.na(y1_iseifG) & !is.na(y3_iseifG) ~ y3_iseifG,
+      is.na(y1_iseifG) & is.na(y3_iseifG) & !is.na(y6_iseifG)~ y6_iseifG,
+      TRUE ~ NA
+      ),
+    
+    # Migration background.
+    y9_generationG = case_when(
+      !is.na(y6_generationG) ~ y6_generationG,
+      is.na(y6_generationG) & !is.na(y1_generationG) ~ y1_generationG,
+      is.na(y6_generationG) & is.na(y1_generationG) &
+        !is.na(y2_generationG) ~ y2_generationG,
+      is.na(y6_generationG) & is.na(y1_generationG) &
+        is.na(y2_generationG) & !is.na(y3_generationG) ~ y3_generationG,
+      TRUE ~ NA
+      ),
+    
+    # Some cases in Wave 1 have missing information on either grandparents or parents, which is then clarified in Waves 2 and 3. The later and more precise data is recovered accordingly.
+    
+    y9_generationG = case_when(
+      y1_generationG > 14 & y2_generationG <= 14 ~ y2_generationG,
+      y1_generationG > 14 & y3_generationG <= 14 ~ y3_generationG,
+      TRUE ~ y9_generationG
+      ),
+    
+    # Gender.
+    y9_sex = case_when(
+      is.na(y9_sex) & !is.na(y6_sex) ~ y6_sex,
+      TRUE ~ y9_sex
+      )
+    ) |>
+  # Dropping the now redundant variables from previous waves and the Wave 9 indicator for full-time or part-time employment.
+  select(-y9_csit4H, -y1_iseimG, -y1_iseifG, -y1_generationG,
+         -y2_generationG, -y3_iseimG, -y3_iseifG, -y3_generationG,
+         -y6_iseifG, -y6_iseimG, -y6_sex, -y6_generationG)
+
+# Tidying data on secondary school educational track.
+
+lhc_wave6 <- lhc_wave6 |>
+  # Setting all missing values as NA.
+  mutate_all(~ ifelse(. %in% c(-99, -88, -77, -66, -55, -44, -33, -22),
+                      NA, .)) |>
+  # Joining the LHC data with information on educational track from the main analytic sample.
+  left_join(d |> select(youthid, y9_hgendeg), by = "youthid") |>
+  # Keeping only respondents for which educational track is unclear in the main analytic sample.
+  filter(y9_hgendeg %in% c(5, 6)) |>
+  # Arranging LHC records (time spells) by starting year and month.
+  arrange(youthid, y6_ylhcs_begdaty, y6_ylhcs_begdatm) |>
+  # Keeping only respondents for which data on secondary school educational track can be recovered.
+  filter(
+    !is.na(y6_s1_grad3) & !is.na(y6_s1_g_educ2) & y6_s1_g_educ2 < 5) |>
+  group_by(youthid) |> mutate(
+    # Grouping by respondent and filling the missing educational tracks in the main analytic sample.
+    y9_n_hgendeg = last(y6_s1_g_educ2) # Keeping only data from the latest spell.
+    ) |> slice_tail() |> ungroup()
+
+# Recoverable information for secondary school educational track of 79 young adults is now joined in the main analytic sample.
+
+d <- d |> left_join(lhc_wave6 |> select(youthid, y9_n_hgendeg),
+                       by = "youthid") |> mutate(
+                         y9_hgendeg = case_when(
+                           !is.na(y9_n_hgendeg) ~ y9_n_hgendeg,
+                           TRUE ~ y9_hgendeg
+                           ),
+                         
+                         y9_hgendeg = case_when(
+                           y9_hgendeg %in% c(5, 6) ~ NA,
+                           TRUE ~ y9_hgendeg
+                           )) |> select(-y9_n_hgendeg)
+
+# Removing the tidied LHC Wave 6 data to keep the environment clean.
+rm(lhc_wave6)
+
+# Converting all outcome and strata building variables to the factor (categorical) format, assigning appropriate custom labels for each category.
+
+d <- d |> mutate(
+  
+  # Type of contract.
+  y9_w_cont4 = factor(y9_w_cont4,
+                      levels = c(1, 2, 3, 4), 
+                      labels = c("No contract", "Permanent contract",
+                                 "Temporary contract",
+                                 "Temporary contract for seasonal work"
+                        ),
+                      exclude = NULL),
+  
+  # Level of income.
+  y9_w_incCS = factor(y9_w_incCS,
+                      levels = 10:20,
+                      labels = c(
+                        "0-200 Euro",
+                        "201-400 Euro",
+                        "401-600 Euro",
+                        "601-800 Euro",
+                        "801-1000 Euro",
+                        "1001-1200 Euro",
+                        "1201-1400 Euro",
+                        "1401-1600 Euro",
+                        "1601-1800 Euro",
+                        "1801-2000 Euro",
+                        "More than 2000 Euro"
+                        ),
+                      exclude = NULL),
+  
+  # Gender.
+  y9_sex = factor(y9_sex, 
+                      levels = c(1, 2),
+                      labels = c("Man", "Woman"
+                        ),
+                      exclude = NULL),
+ 
+  # Migration background.
+  
+  # Some categories of migration background (15, 16, 17, 20) are empty in the main analytic sample and are thus eliminated.
+  
+  # Categories containing partially missing information (18, 19) are set as NA.
+  
+  y9_generationG = case_when(
+    y9_generationG == 18 ~ NA,
+    y9_generationG == 19 ~ NA,
+    TRUE ~ y9_generationG
+  ),
+  
+  y9_generationG = factor(y9_generationG,
+                      levels = 1:14,
+                      labels = c(
+                        "1.25th generation",
+                        "1.5th generation",
+                        "1.75th generation",
+                        "1st generation, missing migration age",
+                        "2nd generation",
+                        "2.5th generation",
+                        "2.75th generation",
+                        "Interethnic 2nd generation",
+                        "3rd generation",
+                        "3.25th generation",
+                        "3.5th generation",
+                        "Interethnic 3rd generation",
+                        "3.75th generation",
+                        "Native"
+                        ),
+                      exclude = NULL),
+
+  # Secondary school educational track.
+  y9_hgendeg = factor(y9_hgendeg,
+                      levels = c(1, 2, 3, 4), 
+                      labels = c("Lower secondary school",
+                                 "Intermediate secondary school",
+                                 "Higher vocational secondary school",
+                                 "Upper secondary school"
+                        ),
+                      exclude = NULL),
+  
+  # Generating the highest parental ISEI variable.
+  y9_hisei = case_when(
+    is.na(y9_iseimG) & !is.na(y9_iseifG) ~ y9_iseifG,
+    is.na(y9_iseifG) & !is.na(y9_iseimG) ~ y9_iseimG,
+    y9_iseimG > y9_iseifG ~ y9_iseimG,
+    y9_iseimG < y9_iseifG ~ y9_iseifG,
+    y9_iseimG == y9_iseifG ~ y9_iseimG,
+    TRUE ~ NA
+    ),
+  ) |> 
+  # Dropping the now redundant variables for parental ISEI (mother) and parental ISEI (father).
+  select(-y9_iseimG, -y9_iseifG) 
+
+# Releasing the unused memory to keep the environment clean.
+gc()
+
+```
+
+### 4.3 ✧ Data imputation with Multivariate Imputation by Chained Equations (MICE)
+
+*Multivariate Imputation by Chained Equations* (MICE) is a multiple imputation method which can be exploited to replace missing data values in a specific data set under certain assumptions about the *missing data mechanism* [@van_buuren_flexible_2021] If the probability of data being missing is the same for all cases, then the data are said to be missing completely at random (MCAR).
+
+However, in the leveraged Fully Conditional Specification (FCS) method, it is assumed that the probability of data being missing is the same only within groups defined by the observed data, that is, that the data are missing at random (MAR) [@van_buuren_flexible_2021]. If neither MCAR nor MAR holds, then the data is missing not at random (MNAR), that is, the probability of being missing varies for unobserved reasons [@van_buuren_flexible_2021].
+
+MICE imputes missing values in the variables of a data set by focusing on one variable at a time. MICE uses a selected subset of data set variables to predict incomplete data in that variable. All predictions are based on specific regression models, one for each variable, with the form of each model depending on the format of each variable [@van_buuren_flexible_2021].
+
+To highlight why MICE is necessary in this study, missing values for each variable are computed and shown.
+
+```{r}
+d |> select(-youthid) |>
+  # Counting missing values.
+  summarise_all(~ sum(is.na(.))) |>  
+  # Converting the data set to a longer, more human readable format.
+  gather(key = "Variable", value = "Missing_Count") |>
+  mutate(
+    # Getting the total number of rows in the analytic sample.
+    Total_Rows = nrow(d),
+    
+    # Calculating the percentage of incomplete cases for each variable.
+    Missing_Percentage = round((Missing_Count / Total_Rows) * 100, 2)
+  )
+
+```
+
+The share of missing data on the strata building variables is negligible, that is, 0.00% (gender), 0.46% (migration background), 1.21% (HISEI), and 1.69% (secondary school track).
+
+The share of missing data on the outcome variables is considerably larger. For type of contract, it is small but substantial (6.51%). For level of income, it constitutes almost one fifth of the entire analytic sample (19.29%).
+
+Since the aim is to model CILS4EU-DE data with intersectional *Multilevel Analysis of Individual Heterogeneity and Discriminatory Accuracy* (MAIHDA), to most appropriately evaluate relatively high-dimensional interactions in small samples [@mahendran_quantitative_2022] sample size should be sufficiently large and well-distributed across intersectional clusters to prevent substantial underestimation of between-strata variance [@keller_educational_2023]. This constitutes the key reason why imputing missing data with MICE is necessary.
+
+Since the fraction of complete cases is equal to 78.75% (N = 1886) of the analytic sample, with the fraction of incomplete cases being 21.25% (N = 509), it also appears that there is a substantial relation between the missingness of the two outcome variables. This can be checked by visualising the missing data pattern with the `plot_pattern` function of `ggmice`.
+
+```{r}
+d |> select(-youthid) |>
+  # Renaming all variables to make them visually intelligible.
+  rename(gndr = y9_sex,
+         migr = y9_generationG,
+         hisei = y9_hisei,
+         edu = y9_hgendeg,
+         contr = y9_w_cont4,
+         inc = y9_w_incCS) |>
+  # Calling the ggmice function plot_patter to visualise the missing data pattern, and rotating the plot for better intepretability.
+  plot_pattern(square = TRUE,
+               rotate = TRUE)
+```
+
+Out of the 470 cases where information for either type of contract or level of income is missing, in only 8 of them level of income is not missing. This is in line with how missingness of income data is generally related to several socio-demographic and socio-economic characteristics: non-respondents cannot be treated as a random subset of the analytic sample [@schenker_multiple_2006].
+
+On one hand, complete case analysis would introduce substantial bias in parameter estimates and statistical inferences. On the other hand, most incomplete cases in the analytic sample are due to missing values on the dependent variables. Von Hippel [-@von_hippel_regression_2007] suggests that imputed outcome measures may generate needless noise in parameter estimates, and advises to remove them prior to analysis. In this practical case, this choice would render MICE meaningless, as both outcome variables are known in only 39 out of the 509 non-complete cases (7.66%).
+
+However, Sullivan and colleagues [-@sullivan_bias_2015] convincingly argue that, when auxiliary information associated to the outcome(s) and missingness in the outcome(s) is present, deleting imputed outcomes prior to analysis also leads to markedly biased parameter estimates. Therefore, the inclusion of auxiliary variables related to the incomplete variables and the probability of missing data should be prioritised, as it is important for satisfying the MAR assumption [@van_buuren_flexible_2021].
+
+For methodological and practical reasons, as has already been done in studies utilising MAIHDA [@keller_educational_2023], the most appropriate decision is to impute the missing data with MICE. Aligning with the indications of van Buuren [-@van_buuren_flexible_2021], the MAR assumption is the starting point. The MAR assumption implies that missingness is systematically related to the observed variables, rather than other unobserved data. This is because if missing data rates do not exceed 25%, and if an unobserved variable's correlation is below 0.40, its omission from the imputation model has a negligible effect on MICE estimation [@collins_comparison_2001].
+
+The main aim in the present study is to impute the outcome variables for type of contract and level of income. A secondary objective is to impute the highest parental ISEI, gender, migration background, and secondary school educational track variables necessary for strata building. Thus, choices in the form of the imputation model, the set of variables to be included as predictors, and the order, number of iterations, and number of imputed datasets, is primarily geared towards yielding the best possible predictions for type of contract and level of income.
+
+Since most of the relevant variables in the current subset are either categorical and non-ordered in nature, or numerical transformation of functionally nominal codes such as ISCO, the MICE technique, as well as convergence diagnostics for MICE chains, are more difficult to compute and evaluate. It is usually more appropriate to not proceed with joint modelling with the assumption of multivariate normality, due to the method of rounding to the nearest category introducing bias in the estimates of interest [@horton_potential_2003].
+
+It is thus best to advance with Fully Conditional Specification (FCS), specifying an imputation model for each variable with incomplete cases, and generating imputed values in an iterative fashion [@van_buuren_fully_2006; @van_buuren_multiple_2007]. As a rule of thumb, van Buuren [@van_buuren_flexible_2021] notes that at least 10 events per categorical predictor are required to get stable estimates of the regression coefficients in the imputation model [@van_belle_statistical_2008]. Since the outcome variables respectively contain four and ten categories, and their classes are heavily imbalanced, the default functional forms for multi-categorical nominal data, that is, `polyreg` and `polr`, may lead to issues in estimation. Consequently, van Buuren [-@van_buuren_flexible_2021] advises to specify and compare more robust methods, like `pmm`, `cart` or `rf`, leaving the generally inferior `lda` as a backup if all else fails.
+
+Turning to predictor selection, it is often beneficial to choose as large a number of auxiliary variables as possible, making the MAR assumption more plausible [@schafer_missing_2002]. However, since the original CILS4EU-DE Wave 9 data set contains hundreds of variables, some of which are unavailable in the reduced version for off-site use, this solution is unfeasible, due to potential multi-collinearity and computational limitations.
+
+In line with van Buuren's [-@van_buuren_flexible_2021] recommendations, it is thus advised to select a suitable subset of data that contains no more than 15 to 25 variables. All the 6 variables that will appear in the intersectional MAIHDA models are specified in the MICE equations, including the outcomes [@little_regression_1992; @moons_using_2006]. Furthermore, it is necessary to specify the main interaction of scientific interest, that is, the four-way interaction of parental social class or highest parental ISEI, gender, migration background, and educational track [@keller_educational_2023].
+
+```{r}
+# Creating the variable measuring the four-way interaction between highest parental ISEI, gender, migration background, and educational track.
+
+d <- d |> mutate(
+  # Four-way interaction
+  y9_fourway = y9_hisei * as.numeric(y9_sex) *
+    as.numeric(y9_generationG) * as.numeric(y9_hgendeg)
+)
+
+```
+
+Factors that may have influenced non-response for the main target variables, that is, type of contract and level of income, must be included on substantive grounds, as well as those for which the distributions differ between complete and incomplete groups [@van_buuren_flexible_2021].
+
+Weights may be useful to specify in the imputation models, but longitudinal weights for the panel sample and adjusted design weights for the refreshment sample of CILS4EU-DE are only available in Waves 6 and 7. In other words, drop-out weights for Wave 9 would need to be updated manually. The supplementary information for value imputation provided by these weights would be too scarce to make the new weight derivation process worthwhile.
+
+Instead, other variables that plausibly impact non-response on a substantive basis are leveraged. First, the variable indicating whether the respondent belongs to the original panel or the refreshment sample, `y6_sample`. Second, the variable recording the mode of interview in the youth main questionnaire, `y9_status`. Unfortunately, other indicators of sample stratification are not available for the refreshment sample and cannot be appropriately implemented in the imputation models.
+
+```{r}
+# Selecting the y6_sample and y9_status variables from Wave 6 and Wave 9 of CILS4EU-DE.
+
+d <- d |> left_join(
+  read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+    select(youthid, y9_status),
+  by = "youthid") |>
+  left_join(read_dta(
+    "Data/CILS4EU-DE/Stata/w1234567c189_tr_ge_v7.0.0_rv.dta") |>
+      select(youthid, y6_sample),
+      by = "youthid"
+      ) |> mutate(
+        # Transforming the y6_sample and y9_status variables into factors.
+        y6_sample = factor(y6_sample),
+        y9_status = factor(y9_status)
+        )
+```
+
+Two auxiliary variables are selected based on their correlation (\> 0.1) with missingness in the outcome variables [@van_buuren_flexible_2021]. First, `y9_futmon`, that is, the respondent's future expectations on wealth in Wave 9 (2022). Second, `y9_rel1`, that is, the respondent's religious affiliation.
+
+```{r}
+# Showing the intercorrelations between the selected auxiliary variables and indicators of missingness in the outcome.
+
+# Reading the outcome and auxiliary variables from Wave 9 of CILS4EU-DE and conditioning on the existing analytic sample.
+
+read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+  filter(youthid %in% d$youthid) |>
+  select(youthid, y9_w_incCS, y9_w_cont4,
+         y9_futmon, y9_rel1) |>
+  # Setting all missing values as NA.
+  mutate_all(~ ifelse(. %in% c(-99, -88, -77, -66,
+                               -55, -44, -33, -22), NA, .)) |>
+  # Creating the indices for missingness in the outcome variables.
+  mutate(
+    # Type of contract.
+    resp_w_cont4 = case_when(
+      !is.na(y9_w_cont4) ~ 1,
+      is.na(y9_w_cont4) ~ 0,
+      TRUE ~ NA
+      ),
+    
+    # Level of income.
+    resp_w_incCS = case_when(
+      !is.na(y9_w_incCS) ~ 1,
+      is.na(y9_w_incCS) ~ 0,
+      TRUE ~ NA
+      )
+  ) |>
+  # Creating a summary table with intercorrelations between the selected auxiliary variables and the indices for missingness in the outcome variables, using all observations in the analytic sample.
+  summarise(
+    futmon_cont4 = cor(y9_futmon, resp_w_cont4, use = "complete.obs"),
+    futmon_incCS = cor(y9_futmon, resp_w_incCS, use = "complete.obs"),
+    rel1_cont4 = cor(y9_rel1, resp_w_cont4, use = "complete.obs"),
+    rel1_incCS = cor(y9_rel1, resp_w_incCS, use = "complete.obs")
+  ) |>
+  # Pivoting the summary table to a longer format to make it more human readable.
+  pivot_longer(everything(), names_to = "variable",
+               values_to = "correlation") |>
+  # Separating columns indicating auxiliary and outcome missingness variables to foster the summary table's interpretability.
+  separate_wider_delim(cols = "variable",
+                       names = c("variable1", "variable2"),
+                       delim = "_")
+
+```
+
+Six auxiliary variables are selected based on their correlation (\> 0.1) with the outcome variables [@van_buuren_flexible_2021]. First, `y9_sat11`, that is, the respondent's satisfaction with their own financial situation. Second, `y9_distr4`, that is, the respondent's distrust in scientist. Third, `y9_w_hoursRV`, that is, the respondent's working hours per week. Fourth, `y9_w_iseiG`, that is, the respondent's ISEI for their current occupation. FIfth, `y9_party1`, that is, the respondent's party preference at the next general election. Sixth, `y9_vote`, that is, the respondent's participation in the German federal election in September 2021. Background checks are run to confirm that none of the selected auxiliary variables are heavily correlated with the others, to offset the risk of introducing strong multicollinearity in the imputation equations.
+
+```{r}
+# Reading the outcome and auxiliary variables from Wave 9 of CILS4EU-DE and conditioning on the existing analytic sample.
+
+read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+  filter(youthid %in% d$youthid) |>
+  select(youthid, y9_w_incCS, y9_w_cont4,
+         y9_sat11, y9_distr4, y9_vote,
+         y9_party1, y9_w_iseiG, y9_w_hoursRV) |>
+  # Setting all missing values as NA.
+  mutate_all(~ ifelse(. %in% c(-99, -88, -77, -66,
+                               -55, -44, -33, -22), NA, .)) |>
+  # Creating a summary table with intercorrelations between the selected auxiliary variables and the outcome variables, using all observations in the analytic sample.
+  summarise(
+    sat_cont4 = cor(y9_sat11, y9_w_cont4, use = "complete.obs"),
+    sat_incCS = cor(y9_sat11, y9_w_incCS, use = "complete.obs"),
+    distr4_cont4 = cor(y9_distr4, y9_w_cont4, use = "complete.obs"),
+    distr4_incCS = cor(y9_distr4, y9_w_incCS, use = "complete.obs"),
+    hours_cont4 = cor(y9_w_hoursRV, y9_w_cont4, use = "complete.obs"),
+    hours_incCS = cor(y9_w_hoursRV, y9_w_incCS, use = "complete.obs"),
+    iseiG_cont4 = cor(y9_w_iseiG, y9_w_cont4, use = "complete.obs"),
+    iseiG_incCS = cor(y9_w_iseiG, y9_w_incCS, use = "complete.obs"),
+    party1_cont4 = cor(y9_party1, y9_w_cont4, use = "complete.obs"),
+    party1_incCS = cor(y9_party1, y9_w_incCS, use = "complete.obs"),
+    vote_cont4 = cor(y9_vote, y9_w_cont4, use = "complete.obs"),
+    vote_incCS = cor(y9_vote, y9_w_incCS, use = "complete.obs")
+  ) |>
+  # Pivoting the summary table to a longer format to make it more human readable.
+  pivot_longer(everything(), names_to = "variable",
+               values_to = "correlation") |>
+  # Separating columns indicating auxiliary and outcome variables to foster the summary table's interpretability.
+  separate_wider_delim(cols = "variable",
+                       names = c("variable1", "variable2"),
+                       delim = "_") |>
+  # Arranging the summary table by alphabetical order of the auxiliary variables.
+  arrange(variable1)
+```
+
+All the selected auxiliary variables must now be included in the main analytic sample and further validated, checking the percentage of usable cases among the incomplete cases for the outcome variables for each auxiliary variable. Van Buuren [-@van_buuren_flexible_2021] advises to use auxiliary variables that have a percentage of usable cases of at least 40%.
+
+```{r}
+# Joining the selected auxiliary variables from Wave 9 of CILS4EU-DE into the existing analytic sample.
+
+d <- d |>
+  left_join(
+    read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+      select(youthid, y9_futmon, y9_rel1, y9_sat11, y9_distr4,
+             y9_vote, y9_party1, y9_w_iseiG, y9_w_hoursRV
+             ), by = "youthid") |> 
+  # Setting all missing values as NA.
+  mutate(
+    across(y9_futmon:y9_w_hoursRV,
+      ~ case_when(
+        . %in% c(-99, -88, -77, -66, -55, -44, -33, -22) ~ NA,
+        TRUE ~ .
+        )
+      )
+  ) |>
+  # Transforming auxiliary variables into appropriate formats for MICE imputation.
+  mutate(
+    across(y9_futmon:y9_party1, ~ factor(., exclude = NA)),
+    y9_w_hoursRV = as.numeric(y9_w_hoursRV),
+    y9_w_iseiG = as.numeric(y9_w_iseiG)
+  )
+
+# Creating and showing a summary table with the percentage of usable cases among incomplete cases for type of contract across all auxiliary variables.
+
+d |> select(y9_w_cont4, y9_fourway, y9_futmon, y9_rel1, y9_sat11,
+            y9_distr4, y9_vote, y9_party1, y9_w_iseiG, y9_w_hoursRV) |>
+  filter(is.na(y9_w_cont4)) |>
+  select(-y9_w_cont4) |>
+  # Percentages are summarised across all auxiliary variables and rounded to the second decimal place.
+  summarise(across(everything(), ~ round(100 * sum(!is.na(.)) / n(), 2)))
+```
+
+Among the incomplete cases for type of contract (156), the usable cases for the `y9_w_iseiG` variable are only 11.54%, while the usable cases for the `y9_w_hoursRV` variable are only 8.97%.
+
+```{r}
+# Creating and showing a summary table with the percentage of usable cases among incomplete cases for level of income across all auxiliary variables.
+
+d |> select(y9_w_incCS, y9_fourway, y9_futmon, y9_rel1, y9_sat11,
+               y9_distr4, y9_vote, y9_party1, y9_w_iseiG, y9_w_hoursRV) |>
+  filter(is.na(y9_w_incCS)) |>
+  select(-y9_w_incCS) |>
+  # Percentages are summarised across all auxiliary variables and rounded to the second decimal place.
+  summarise(across(everything(), ~ round(100 * sum(!is.na(.)) / n(), 2)))
+
+```
+
+Inspecting usable cases among incomplete cases for level of income (462) highlights there are no problematic auxiliary variables. Based on this validation check `y9_w_iseiG` and `y9_w_hoursRV` are excluded the MICE equations. An automatic check with the `quickpred` option is specified to ensure that variables excluded on substantive grounds from MICE equations are are appropriately handled.
+
+The order in which variables are imputed in MICE is unimportant. This is because there is little evidence that the visit sequence order of the imputation process matters in practice, even for clearly incompatible imputation models \[van Buuren, 2006\].
+
+The next step is to test and compare the convergence and imputed outcomes produced by the `pmm`, `cart` or `rf` methods, respectively. In accordance with van Buuren's [-@van_buuren_flexible_2021] recommendations, the number of imputed datasets is initially set at 5, running a standard of 20 chain iterations to ensure convergence. The number of imputed datasets is then increased to 50 in the final MICE imputation, to ensure reliable Bayesian inferences with the `brms` package [@zhou_note_2010].
+
+The auxiliary variable `y9_party1` is also excluded from the imputation models after some testing, because it introduces instability by not providing enough usable cases on one of the categories of `y9_w_incCS`.
+
+```{r}
+# Excluding y9_party1 from the imputation models.
+d <- d |> 
+  select(-youthid, -y9_party1)
+
+# Creating the objects specifying the usage of the pmm, cart, or rf method in the MICE algorithm for imputing all variables. Variables with complete cases only are subject to passive imputation.
+
+# Predictive Mean Matching (pmm).
+methods_pmm <- c(
+  y9_w_cont4 = "pmm",
+  y9_w_incCS = "pmm",
+  y9_sex = "",
+  y9_hgendeg = "pmm",
+  y9_generationG = "pmm",
+  y9_hisei = "pmm",
+  y9_fourway = "pmm",
+  y9_status = "",
+  y6_sample = "",
+  y9_futmon = "pmm",
+  y9_rel1 = "pmm",
+  y9_sat11 = "pmm",
+  y9_distr4 = "pmm",
+  y9_vote = "pmm",
+  y9_w_iseiG = "pmm",
+  y9_w_hoursRV = "pmm"
+  )
+
+# Classification And Regression Trees (CART).
+methods_cart <- c(
+  y9_w_cont4 = "cart",
+  y9_w_incCS = "cart",
+  y9_sex = "",
+  y9_hgendeg = "cart",
+  y9_generationG = "cart",
+  y9_hisei = "cart",
+  y9_fourway = "cart",
+  y9_status = "",
+  y6_sample = "",
+  y9_futmon = "cart",
+  y9_rel1 = "cart",
+  y9_sat11 = "cart",
+  y9_distr4 = "cart",
+  y9_vote = "cart",
+  y9_w_iseiG = "cart",
+  y9_w_hoursRV = "cart"
+  )
+
+# Random Forest (RF).
+methods_rf <- c(
+  y9_w_cont4 = "rf",
+  y9_w_incCS = "rf",
+  y9_sex = "",
+  y9_hgendeg = "rf",
+  y9_generationG = "rf",
+  y9_hisei = "rf",
+  y9_fourway = "rf",
+  y9_status = "",
+  y6_sample = "",
+  y9_futmon = "rf",
+  y9_rel1 = "rf",
+  y9_sat11 = "rf",
+  y9_distr4 = "rf",
+  y9_vote = "rf",
+  y9_w_iseiG = "rf",
+  y9_w_hoursRV = "rf"
+  )
+
+```
+
+It is time to run the MICE algorithms. First, the Predictive Mean Matching (`pmm`) method is tested.
+
+```{r, results = "hide"}
+impute_pmm <- mice(d,
+  m = 5, # Setting the number of multiple imputations chains to 5.
+  method = methods_pmm, # Specifying the functional forms (pmm).
+  quickpred(d, minpuc = 0.4,
+            # The percentage of usable cases must be at least 40% (0.4).
+            # The outcome variables, strata building variables, four-way interaction variable, and sample stratification variable must be included in all MICE equations.
+            include = c("y9_w_cont4", "y9_w_incCS",
+                        "y9_sex", "y9_hgendeg",
+                        "y9_generationG", "y9_hisei",
+                        "y9_fourway", "y9_status",
+                        "y6_sample")),
+  maxit = 20, # Setting the number of iterations per imputation chain to 20.
+  seed = 420, # Setting a seed to ensure reproducibility.
+  print = FALSE # Computation diagnostics must not be printed.
+)
+```
+
+Second, the Classification And Regression Trees (`cart`) method is tested.
+
+```{r, results = "hide"}
+impute_cart <- mice(d,
+  m = 5, # Setting the number of multiple imputations chains to 5.
+  method = methods_cart, # Specifying the functional forms (cart).
+  quickpred(d, minpuc = 0.4,
+            # The percentage of usable cases must be at least 40% (0.4).
+            # The outcome variables, strata building variables, four-way interaction variable, and sample stratification variable must be included in all MICE equations.
+            include = c("y9_w_cont4", "y9_w_incCS",
+                        "y9_sex", "y9_hgendeg",
+                        "y9_generationG", "y9_hisei",
+                        "y9_fourway", "y9_status",
+                        "y6_sample")),
+  maxit = 20, # Setting the number of iterations per imputation chain to 20.
+  seed = 420, # Setting a seed to ensure reproducibility.
+  print = FALSE # Computation diagnostics must not be printed.
+)
+```
+
+Third, the Random Forest (`rf`) method is tested.
+
+```{r, results = "hide"}
+impute_rf <- mice(d,
+  m = 5, # Setting the number of multiple imputations chains to 5.
+  method = methods_rf, # Specifying the functional forms (rf).
+  quickpred(d, minpuc = 0.4,
+            # The percentage of usable cases must be at least 40% (0.4).
+            # The outcome variables, strata building variables, four-way interaction variable, and sample stratification variable must be included in all MICE equations.
+            include = c("y9_w_cont4", "y9_w_incCS",
+                        "y9_sex", "y9_hgendeg",
+                        "y9_generationG", "y9_hisei",
+                        "y9_fourway", "y9_status",
+                        "y6_sample")),
+  maxit = 20, # Setting the number of iterations per imputation chain to 20.
+  seed = 420, # Setting a seed to ensure reproducibility.
+  print = FALSE # Computation diagnostics must not be printed.
+)
+```
+
+Convergence diagnostics are provided in the form of MICE chain means plotted with `matplot`. Chain means should mix well and not show any degeneracy, that is, abnormal variations, towards the last iterations.
+
+```{r}
+# Predictive Mean Matching, Type of Contract.
+
+matplot(impute_pmm$chainMean["y9_w_cont4", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Type of Contract, PMM")
+```
+
+In the imputation model for type of contract using Predictive Mean Matching, the chains mix well and do not show any degeneracy.
+
+```{r}
+# Classification And Regression Trees, Type of Contract.
+
+matplot(impute_cart$chainMean["y9_w_cont4", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Type of Contract, CART")
+
+```
+
+In the imputation model for type of contract using Classification And Regression Trees, the chains mix well and do not show any degeneracy.
+
+```{r}
+# Random Forest, Type of Contract.
+
+matplot(impute_rf$chainMean["y9_w_cont4", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Type of Contract, RF")
+
+```
+
+In the imputation model for type of contract using the Random Forest method, the chains mix well, but show slightly anomalous values towards the last iterations.
+
+```{r}
+# Predictive Mean Matching, Level of Income.
+
+matplot(impute_pmm$chainMean["y9_w_incCS", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Income, PMM")
+
+```
+
+In the imputation model for level of income using Predictive Mean Matching, the chains mix well, but one of the chains shows an anomaly in the last iteration.
+
+```{r}
+# Classification And Regression Trees, Level of Income.
+
+matplot(impute_cart$chainMean["y9_w_incCS", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Income, CART")
+
+```
+
+In the imputation model for level of income using Classification And Regression Trees, the chains mix well and do not show any degeneracy.
+
+```{r}
+# Random Forest, Level of Income.
+
+matplot(impute_rf$chainMean["y9_w_incCS", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Income, RF")
+
+```
+
+In the imputation model for level of income using the Random Forest method, the chains mix well, but show slightly anomalous values towards the last iterations. In sum, the `cart` and `pmm` methods exhibit the best convergence, while the `rf` method appears to be less robust.
+
+After testing and comparing convergence diagnostics, it is necessary to confront whether and the extent to which the distribution of predicted values is reasonable. These MICE diagnostics are predominantly tailored for continuous imputed variables.
+
+[Nicole Erler](https://nerler.github.io/EP16_Multiple_Imputation/slide/07_convergence_and_diagnostics.pdf) suggests to compare the proportion of values in each category. This allows to establish whether missing values are reasonably distributed, or are imputed in certain categories more or less often expected based on the observed (incomplete) data.
+
+`mice` does not provide a built-in function to execute this operation, but Nicole Erler conveniently provides the custom function `propplot()`. The syntax utilised in the following chunk can be found [here](https://gist.github.com/NErler/0d00375da460dd33839b98faeee2fdab).
+
+```{r}
+# Custom function to visually compare proportions in categorical variables between observed and imputed data visually (using ggplot, adapted from the custom function by Nicole Erler).
+
+# Parameters:
+# x: mids object (from mice).
+# formula: formula describing which variables to plot.
+# facet: either "wrap" for facet_wrap or "grid" for facet_grid.
+# ...: additional parameters passed to theme() in ggplot.
+
+# Note: if the formula is not specified, all imputed categorical variables are plotted. 
+
+# A formula must have the structure:
+# categorical variables ~ faceting variables | color variable
+
+# By default, .imp (imputation set identifier) is used as color variable.
+
+# This custom function uses the following packages:
+# - mice
+# - reshape2
+# - RColorBrewer
+# - ggplot2
+
+propplot <- function(x, formula, facet = "wrap", ...) {
+
+  cd <- data.frame(mice::complete(x, "long", include = TRUE))
+
+  cd$.imp <- factor(cd$.imp)
+  
+  r <- as.data.frame(is.na(x$data))
+  
+  impcat <- x$method != "" & sapply(x$data, is.factor)
+  vnames <- names(impcat)[impcat]
+  
+  if (missing(formula)) {
+    formula <- as.formula(paste(paste(vnames, collapse = "+",
+                                      sep = ""), "~1", sep = ""))
+  }
+  
+  tmsx <- terms(formula[-3], data = x$data)
+  xnames <- attr(tmsx, "term.labels")
+  xnames <- xnames[xnames %in% vnames]
+  
+  if (paste(formula[3]) != "1") {
+    wvars <- gsub("[[:space:]]*\\|[[:print:]]*", "", paste(formula)[3])
+    
+    wvars <- attr(terms(as.formula(paste("~", wvars))), "term.labels")
+    
+    if (grepl("\\|", formula[3])) {
+      svars <- gsub("[[:print:]]*\\|[[:space:]]*", "", paste(formula)[3])
+      svars <- all.vars(as.formula(paste("~", svars)))
+    } else {
+      svars <- ".imp"
+    }
+  } else {
+    wvars <- NULL
+    svars <- ".imp"
+  }
+  
+  for (i in seq_along(xnames)) {
+    xvar <- xnames[i]
+    select <- cd$.imp != 0 & !r[, xvar]
+    cd[select, xvar] <- NA
+  }
+  
+  
+  for (i in which(!wvars %in% names(cd))) {
+    cd[, wvars[i]] <- with(cd, eval(parse(text = wvars[i])))
+  }
+  
+  meltDF <- reshape2::melt(cd[, c(wvars, svars, xnames)],
+                           id.vars = c(wvars, svars))
+  meltDF <- meltDF[!is.na(meltDF$value), ]
+  
+  
+  wvars <- if (!is.null(wvars)) paste0("`", wvars, "`")
+  
+  a <- plyr::ddply(meltDF, c(wvars, svars, "variable", "value"),
+                   plyr::summarize,
+             count = length(value))
+  b <- plyr::ddply(meltDF, c(wvars, svars, "variable"), plyr::summarize,
+             tot = length(value))
+  
+  mdf <- merge(a,b)
+  
+  mdf$prop <- mdf$count / mdf$tot
+  
+  plotDF <- merge(unique(meltDF), mdf)
+  
+  plotDF$value <- factor(plotDF$value,
+                         levels = unique(unlist(lapply(x$data[, xnames],
+                                                       levels))),
+                         ordered = T)
+  
+  p <- ggplot(plotDF, aes(x = value, fill = get(svars), y = prop)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    theme(legend.position = "bottom", ...) +
+    ylab("proportion") +
+    scale_fill_manual(name = "",
+                      values = c("black",
+                                 colorRampPalette(
+                                   RColorBrewer::brewer.pal(
+                                     9, "Blues"))(x$m + 3)[1:x$m + 3])) +
+    scale_y_continuous(breaks = seq(0, 1, by = 0.05))
+    guides(fill = guide_legend(nrow = 1))
+  
+  if (facet == "wrap")
+    if (length(xnames) > 1) {
+      print(p + facet_wrap(c("variable", wvars), scales = "free"))
+    } else {
+      if (is.null(wvars)) {
+        print(p)
+      } else {
+        print(p + facet_wrap(wvars, scales = "free"))
+      }
+    }
+  
+  if (facet == "grid")
+    if (!is.null(wvars)) {
+      print(p + facet_grid(paste(paste(wvars, collapse = "+"),
+                                 "~ variable"),
+                           scales = "free"))
+    }
+}
+```
+
+Predicted imputed values diagnostics are computed and plotted with the `propplot()` custom function.
+
+```{r}
+# Predictive Mean Matching, Type of Contract.
+
+propplot(impute_pmm, y9_w_cont4 ~ 1, axis.text.x = element_text(size = 7))
+
+```
+
+In the imputation model for type of contract using Predictive Mean Matching, missing values are very reasonably and stably distributed.
+
+```{r}
+# Classification And Regression Trees, Type of Contract.
+
+propplot(impute_cart, y9_w_cont4 ~ 1, axis.text.x = element_text(size = 7))
+
+```
+
+In the imputation model for type of contract using Classification And Regression Trees, missing values are very reasonably and quite stably distributed.
+
+```{r}
+# Random Forest, Type of Contract.
+
+propplot(impute_rf, y9_w_cont4 ~ 1, axis.text.x = element_text(size = 7))
+
+```
+
+In the imputation model for type of contract using the Random Forest method, missing values are reasonably, yet slightly unstably distributed.
+
+```{r}
+# Predictive Mean Matching, Level of Income.
+
+propplot(impute_pmm, y9_w_incCS ~ 1,
+         axis.text.x = element_text(size = 6, angle = 90, hjust = 0.5))
+
+```
+
+In the imputation model for level of income using Predictive Mean Matching, missing values are very reasonably, yet slightly unstably distributed.
+
+```{r}
+# Classification And Regression Trees, Level of Income.
+
+propplot(impute_cart, y9_w_incCS ~ 1,
+         axis.text.x = element_text(size = 6, angle = 90, hjust = 0.5))
+
+```
+
+In the imputation model for level of income using Classification And Regression Trees, missing values are very reasonably, yet quite unstably distributed.
+
+```{r}
+# Random Forest, Level of Income.
+
+propplot(impute_rf, y9_w_incCS ~ 1,
+         axis.text.x = element_text(size = 6, angle = 90, hjust = 0.5))
+
+```
+
+In the imputation model for level of income using the Random Forest method, missing values are not reasonably distributed and quite unstable, as the MICE algorithm tends to predict the highest possible category substantially more often than expected. In sum, the `pmm` and `cart` methods exhibit the most reasonable distributions of predicted values, while the `rf` method appears to be less robust.
+
+Background checks corroborate that the `pmm` method most optimally approximates type of contract and level of income categories conditional on the main strata variables, especially because `cart` tends to substantially overestimate high incomes among youth graduating from lower secondary school, that is, the *Hauptschule*.
+
+The definitive MICE imputation, using the `pmm` method, can now be performed by increasing the number of imputation chains to 50.
+
+```{r, results = "hide"}
+# Removing the test imputations, the methods objects for the CART and Random Forest methods, and the propplot() custom function to keep the environment clean.
+rm(impute_pmm, impute_cart, impute_rf, methods_cart, methods_rf, propplot)
+
+impute_pmm <- mice(d,
+  m = 50, # Setting the number of multiple imputations chains to 50.
+  method = methods_pmm, # Specifying the functional forms (pmm).
+  quickpred(d, minpuc = 0.4,
+            # The percentage of usable cases must be at least 40% (0.4).
+            # The outcome variables, strata building variables, four-way interaction variable, and sample stratification variable must be included in all MICE equations.
+            include = c("y9_w_cont4", "y9_w_incCS",
+                        "y9_sex", "y9_hgendeg",
+                        "y9_generationG", "y9_hisei",
+                        "y9_fourway", "y9_status",
+                        "y6_sample")),
+  maxit = 20, # Setting the number of iterations per imputation chain to 20.
+  seed = 420, # Setting a seed to ensure reproducibility.
+  print = FALSE # Computation diagnostics must not be printed.
+)
+```
+
+Convergence diagnostics for the definitive MICE imputation are provided in the form of MICE chain means plotted with `matplot`. Chain means should mix well and not show any degeneracy, that is, abnormal variations, towards the last iterations.
+
+```{r}
+# Predictive Mean Matching, Type of Contract.
+
+matplot(impute_pmm$chainMean["y9_w_cont4", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Type of Contract, PMM")
+```
+
+In the definitive imputation model for type of contract using Predictive Mean Matching, the chains mix well and do not show any degeneracy.
+
+```{r}
+# Predictive Mean Matching, Level of Income.
+
+matplot(impute_pmm$chainMean["y9_w_incCS", , ],
+        type = "l", ylab = "Imputed value",
+        xlab = "Iteration", main = "Income, PMM")
+
+```
+
+In the definitive imputation model for level of income using Predictive Mean Matching, the chains mix well and do not show any degeneracy.
+
+The complete version of the final imputed analytic sample is saved as a `mids` object, and as two wide and long format tibbles, respectively, to ensure full transparency of the MICE imputation process.
+
+```{r, include = FALSE}
+# Extracting the complete, wide and long versions of the post-imputation analytic sample.
+imp <- complete(impute_pmm, "all")
+imp_desc <- complete(impute_pmm, "long", include = TRUE)
+
+# Saving the original pre-imputation dataset, the mids object, and the wide and long format tibbles as R data spaces, compressed with the gzip method.
+saveRDS(d, file = "Data/Many Intersections in Search of an Author/d_og",
+        compress = "gzip")
+
+saveRDS(impute_pmm,
+        file = "Data/Many Intersections in Search of an Author/mids_og",
+        compress = "gzip")
+
+saveRDS(imp,
+        file = "Data/Many Intersections in Search of an Author/imp_og",
+        compress = "gzip")
+
+saveRDS(imp_desc,
+      file = "Data/Many Intersections in Search of an Author/imp_long_og",
+        compress = "gzip")
+
+# Removing the methods object for Predictive Mean Matching and the now saved midj object to keep the environment clean.
+rm(methods_pmm, impute_pmm)
+
+# Releasing the unused memory to keep the environment clean.
+gc()
+```
+
+### 4.4 ✧ Category building & strata analysis
+
+With data being imputed, the focus turns on operationalising categories of social difference and building intersectional strata in parental social class, gender, migration background. Social categories need to be operationalised in a simple, yet substantively relevant way, aiming to generate balanced categories. This is because overly small strata containing less than 10 respondents exhibit minor but consistent negative bias [@van_dusen_comparing_2024].
+
+In all versions of the main analytic sample, highest parental ISEI must be transformed into a categorical variable, aligning with the intersectional MAIHDA framework. From a substantive perspective, classifying the overall range of the ISEI scale (10.00 – 90.00) into three categories, that is, lower-class (10.00 – 36.67), middle-class (36.67 – 63.34), and upper-class (63.34 – 90.00) families, maps well onto the International Standard Classification of Occupations 2008 (ISCO-08). ISEI is also empirically strongly correlated with the Erikson-Goldthorpe-Portocarero (EGP) occupational class schema predominant in the sociological field [@ganzeboom_internationally_1996; @hoffmeyer-zlotnik_three_2003].
+
+Gender does not need much recoding, as it is sufficient to transform it into a factor variable, comparing men against women. To keep categories balanced, migration background must be coded as a binary factor variable differentiating between respondents with at least one grandparent who was born outside of Germany and respondents whose grandparents were all born in Germany, aligning with the construction of the generational status variable in CILS4EU-DE [@dollmann_examining_2014]. In other words, any migration background, irrespective of migrant ancestry, is operationalised as the same category.
+
+However, minor variations may be driven by potential generational differences between foreign-born migrants and native-born descendants of migrants arising in school-to-work transitions, emerging due to prolonged processes of integration in German educational institutions (Worbs, 2003). Therefore, robustness checks are specified utilising a distinct three-level categorical variable, `y9_generation3`, distinguishing foreign-born migrants from native-born descendants of migrants. Although small strata containing less than 10 respondents are generated, even under these circumstances, intersectional MAIHDA remains more accurate than conventional single-level frameworks [@van_dusen_comparing_2024].
+
+Finally, educational track is operationalised starting from existing information on secondary school educational pathway. *Hauptschule*, *Realschule*, and the like are classified as *Vocational*, while *Gymnasium* et similia are categorised as *Academic*. This assignment is updated based on post-secondary educational qualifications, recorded in Wave 9 in variables ranging from `y9_vocdeg1` to `y9_vocdeg8`. Irrespective of previous educational background, respondents who completed vocational education and training (VET) or an apprenticeship, or earned a technical school, master craftsman, or technician degree, are reclassified in the *Vocational* track. German young adults who instead achieved a diploma or any other tertiary education qualification are reclassified in the *Academic* track.
+
+Outcome variables are subject to substantial changes as well. In line with intersectional MAIHDA, type of contract and level of income must be transformed into continuous or numeric variables, thus becoming the main outcomes of interest, that is, *probability of being employed under a permanent contract* and *monthly net income in euros* (€). The former is operationalised as a binary numeric variable, indicating the respondent’s probability of being employed under a permanent contract (1) versus working on a temporary or seasonal basis, or lacking a contract, which are classified as precarious (0) job conditions [@van_aerden_measuring_2014; @underhill_how_2011]. Early career returns are operationalised as a numeric variable, that is, total amount of net monthly income in euros in Wave 9 (2022), by setting each category to its mean value, in accordance with the methodology employed by Weißmann and colleagues [-@smyth_educational_2023].
+
+Category building is first executed on the main analytic sample (pre-imputation), without forming the intersectional strata since this data will not be modelled with intersectional MAIHDA.
+
+```{r}
+# Dropping all auxiliary variables and keeping only outcome and strata building variables necessary for intersectional MAIHDA.
+
+d <- d |> select(
+      y9_w_cont4, y9_w_incCS, y9_hisei,
+      y9_sex, y9_generationG, y9_hgendeg
+      ) |>
+    rowwise() |> mutate(pid = cur_group_id()) |>
+  # Recreating personal IDs to join information on post-secondary educational tracks in the main analytic sample (pre-imputation).
+    relocate(pid) |> ungroup() |> left_join(
+      read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+        select(y9_csit4H, y9_vocdeg1, y9_vocdeg2, y9_vocdeg3, y9_vocdeg4,
+               y9_vocdeg5, y9_vocdeg6, y9_vocdeg7, y9_vocdeg8) |>
+        # Keeping only the respondents contained in the main analytic sample (pre-imputation).
+        filter(y9_csit4H == 4) |> select(-y9_csit4H) |>
+        rowwise() |> mutate(pid = cur_group_id()) |>
+        relocate(pid) |> ungroup(), by = "pid") |>
+  mutate(
+        # Transforming type of contract (categorical) into probability of being employed under a permanent contract (continuous).
+          y9_w_cont4 = case_when(
+            y9_w_cont4 == "No contract" |
+              y9_w_cont4 == "Temporary contract" |
+              y9_w_cont4 == "Temporary contract for seasonal work" ~ 0,
+            y9_w_cont4 == "Permanent contract" ~ 1,
+            TRUE ~ as.numeric(y9_w_cont4)
+        ),
+        
+        # Trasforming level of income (categorical) into total amount of monthly net income in euros (continuous).
+        y9_w_incCS = as.numeric(y9_w_incCS),
+        y9_w_incCS = case_when(
+            y9_w_incCS == 1 ~ 100,
+            y9_w_incCS == 2 ~ 300,
+            y9_w_incCS == 3 ~ 500,
+            y9_w_incCS == 4 ~ 700,
+            y9_w_incCS == 5 ~ 900,
+            y9_w_incCS == 6 ~ 1100,
+            y9_w_incCS == 7 ~ 1300,
+            y9_w_incCS == 8 ~ 1500,
+            y9_w_incCS == 9 ~ 1700,
+            y9_w_incCS == 10 ~ 1900,
+            y9_w_incCS == 11 ~ 2100,
+            TRUE ~ y9_w_incCS
+        ),
+        
+        # Trasforming highest parental ISEI (continuous) into parental social class (categorical).
+        y9_hisei = cut(
+            y9_hisei,
+            breaks = c(10, 36.67, 63.34, 90),
+            labels = c("Lower-class", "Middle-class", "Upper-class"),
+            include.lowest = TRUE
+        ),
+        
+        # Collapsing generational status into the migration background, foreign- or native- born variable for the robustness checks.
+        
+        # Please not that "Yes" (has a migration background) and "No" (does not have a migration background) are placeholders for avoiding overly long (and thus difficult to handle) coefficient names.
+        
+        y9_generation3 = fct_collapse(y9_generationG,
+                                      "Yes, foreign-born" = c(
+                                        "1.25th generation",
+                                        "1.5th generation",
+                                        "1.75th generation",
+                                    "1st generation, missing migration age"
+                                      ),
+                                      
+                                      "Yes, native-born" = c(
+                                        "2nd generation",
+                                        "2.5th generation",
+                                        "2.75th generation",
+                                        "Interethnic 2nd generation",
+                                        "3rd generation",
+                                        "3.25th generation",
+                                        "3.5th generation",
+                                      "Interethnic 3rd generation",
+                                        "3.75th generation"
+                                      ),
+                                      
+                                      "No, native-born" = "Native"
+                                  ),
+        
+        # Releveling the y9_generation3 variable to set native-born respondents without a migration background as the reference category.
+        y9_generation3 = fct_relevel(y9_generation3,
+                                      "No, native-born",
+                                      "Yes, native-born",
+                                      "Yes, foreign-born"
+                                      ),
+        
+        # Collapsing generational status into the migration background variable for the main models.
+        
+        # Please not that "Yes" (has a migration background) and "No" (does not have a migration background) are placeholders for avoiding overly long (and thus difficult to handle) coefficient names.
+        
+        y9_generationG = fct_collapse(y9_generationG,
+                                      "Yes" = c(
+                                        "1.25th generation",
+                                        "1.5th generation",
+                                        "1.75th generation",
+                                  "1st generation, missing migration age",
+                                        "2nd generation",
+                                        "2.5th generation",
+                                        "2.75th generation",
+                                        "Interethnic 2nd generation",
+                                        "3rd generation",
+                                        "3.25th generation",
+                                        "3.5th generation",
+                                      "Interethnic 3rd generation",
+                                        "3.75th generation"
+                                      ),
+                                      
+                                      "No" = "Native"
+                                  ),
+        
+        # Releveling the y9_generationG variable to set respondents without a migration background as the reference category.   
+        y9_generationG = relevel(y9_generationG,
+                                 ref = "No"
+                                 ),
+        
+        # Collapsing the secondary high school educational track variable into two categories, that is, "Vocational" and "Academic".
+        y9_hgendeg = fct_collapse(y9_hgendeg,
+                                      "Vocational" = c(
+                                        "Lower secondary school",
+                                        "Intermediate secondary school",
+                                      "Higher vocational secondary school"
+                                      ),
+                                  
+                                  "Academic" = "Upper secondary school"
+                                  ),
+        
+        # Respondents who completed vocational education and training (VET) or an apprenticeship, or earned a technical school, master craftsman, or technician degree, are reclassified in the "Vocational" track.
+        
+        # German young adults who instead achieved a diploma or any other tertiary education qualification are reclassified in the "Academic" track.
+        
+        y9_hgendeg = factor(
+          case_when(y9_vocdeg1 == 1 ~ "Vocational",
+                    y9_vocdeg2 == 1 ~ "Vocational",
+                    y9_vocdeg3 == 1 ~ "Vocational",
+                    y9_vocdeg4 == 1 ~ "Vocational",
+                    y9_vocdeg5 == 1 ~ "Academic",
+                    y9_vocdeg6 == 1 ~ "Academic",
+                    y9_vocdeg7 == 1 ~ "Academic",
+                    y9_vocdeg8 == 1 ~ "Academic",
+                    TRUE ~ y9_hgendeg
+                    )),
+        
+        # Releveling the y9_hgendeg variable to respondents without a migration background as the reference category.  
+          y9_hgendeg = relevel(y9_hgendeg,
+                                 ref = "Academic"
+                                 )
+          ) |>
+  # Dropping all variables recording post-secondary educational pathways with a custom regular expression.
+  select(-matches("^y9_vocdeg[1-8]$"))
+```
+
+Category building is then applied to the 50 multiply imputed main analytic samples (post-imputation), constructing the intersectional strata for the main models and robustness checks.
+
+```{r}
+# Tidyverse operations are mapped on all 50 imputed datasets contained in the imp_main list with the tidyr package.
+
+# Dropping all auxiliary variables and keeping only outcome and strata building variables necessary for intersectional MAIHDA.
+
+imp_main <- map(imp, function(d) {
+    d |> select(
+      y9_w_cont4, y9_w_incCS, y9_hisei,
+      y9_sex, y9_generationG, y9_hgendeg
+      ) |>
+    # Recreating personal IDs to join information on post-secondary educational tracks in the main analytic sample (post-imputation).
+    rowwise() |> mutate(pid = cur_group_id()) |>
+    relocate(pid) |> ungroup() |> left_join(
+      read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+        select(y9_csit4H, y9_vocdeg1, y9_vocdeg2, y9_vocdeg3, y9_vocdeg4,
+               y9_vocdeg5, y9_vocdeg6, y9_vocdeg7, y9_vocdeg8) |>
+        # Keeping only the respondents contained in the main analytic sample (post-imputation).
+        filter(y9_csit4H == 4) |> select(-y9_csit4H) |>
+        rowwise() |> mutate(pid = cur_group_id()) |>
+        relocate(pid) |> ungroup(), by = "pid") |> mutate(
+        
+          # Transforming type of contract (categorical) into probability of being employed under a permanent contract (continuous).
+          y9_w_cont4 = case_when(
+            y9_w_cont4 == "No contract" |
+              y9_w_cont4 == "Temporary contract" |
+              y9_w_cont4 == "Temporary contract for seasonal work" ~ 0,
+            y9_w_cont4 == "Permanent contract" ~ 1,
+            TRUE ~ as.numeric(y9_w_cont4)
+        ),
+        
+        # Trasforming level of income (categorical) into total amount of monthly net income in euros (continuous).
+        y9_w_incCS = as.numeric(y9_w_incCS),
+        y9_w_incCS = case_when(
+            y9_w_incCS == 1 ~ 100,
+            y9_w_incCS == 2 ~ 300,
+            y9_w_incCS == 3 ~ 500,
+            y9_w_incCS == 4 ~ 700,
+            y9_w_incCS == 5 ~ 900,
+            y9_w_incCS == 6 ~ 1100,
+            y9_w_incCS == 7 ~ 1300,
+            y9_w_incCS == 8 ~ 1500,
+            y9_w_incCS == 9 ~ 1700,
+            y9_w_incCS == 10 ~ 1900,
+            y9_w_incCS == 11 ~ 2100,
+            TRUE ~ y9_w_incCS
+        ),
+        
+        # Trasforming highest parental ISEI (continuous) into parental social class (categorical).`
+        y9_hisei = cut(
+            y9_hisei,
+            breaks = c(10, 36.67, 63.34, 90),
+            labels = c("Lower-class", "Middle-class", "Upper-class"),
+            include.lowest = TRUE
+        ),
+        
+        # Collapsing generational status into the migration background, foreign- or native- born variable for the robustness checks.
+        
+        # Please not that "Yes" (has a migration background) and "No" (does not have a migration background) are placeholders for avoiding overly long (and thus difficult to handle) coefficient names.
+        
+        y9_generation3 = fct_collapse(y9_generationG,
+                                      "Yes, foreign-born" = c(
+                                        "1.25th generation",
+                                        "1.5th generation",
+                                        "1.75th generation",
+                                    "1st generation, missing migration age"
+                                      ),
+                                      
+                                      "Yes, native-born" = c(
+                                        "2nd generation",
+                                        "2.5th generation",
+                                        "2.75th generation",
+                                        "Interethnic 2nd generation",
+                                        "3rd generation",
+                                        "3.25th generation",
+                                        "3.5th generation",
+                                      "Interethnic 3rd generation",
+                                        "3.75th generation"
+                                      ),
+                                      
+                                      "No, native-born" = "Native"
+                                  ),
+        
+        # Releveling the y9_generation3 variable to set native-born respondents without a migration background as the reference category.
+        y9_generation3 = fct_relevel(y9_generation3,
+                                      "No, native-born",
+                                      "Yes, native-born",
+                                      "Yes, foreign-born"
+                                      ),
+
+         # Collapsing generational status into the migration background variable for the main models.
+        
+        # Please not that "Yes" (has a migration background) and "No" (does not have a migration background) are placeholders for avoiding overly long (and thus difficult to handle) coefficient names.   
+        
+        y9_generationG = fct_collapse(y9_generationG,
+                                      "Yes" = c(
+                                        "1.25th generation",
+                                        "1.5th generation",
+                                        "1.75th generation",
+                                  "1st generation, missing migration age",
+                                        "2nd generation",
+                                        "2.5th generation",
+                                        "2.75th generation",
+                                        "Interethnic 2nd generation",
+                                        "3rd generation",
+                                        "3.25th generation",
+                                        "3.5th generation",
+                                      "Interethnic 3rd generation",
+                                        "3.75th generation"
+                                      ),
+                                      
+                                      "No" = "Native"
+                                  ),
+
+        # Releveling the y9_generationG variable to set respondents without a migration background as the reference category.   
+        y9_generationG = relevel(y9_generationG,
+                                 ref = "No"
+                                 ),
+        
+        # Collapsing the secondary high school educational track variable into two categories, that is, "Vocational" and "Academic".
+        y9_hgendeg = fct_collapse(y9_hgendeg,
+                                      "Vocational" = c(
+                                        "Lower secondary school",
+                                        "Intermediate secondary school",
+                                      "Higher vocational secondary school"
+                                      ),
+                                  
+                                  "Academic" = "Upper secondary school"
+                                  ),
+        
+        # Respondents who completed vocational education and training (VET) or an apprenticeship, or earned a technical school, master craftsman, or technician degree, are reclassified in the "Vocational" track.
+        
+        # German young adults who instead achieved a diploma or any other tertiary education qualification are reclassified in the "Academic" track.
+        
+        y9_hgendeg = factor(
+          case_when(y9_vocdeg1 == 1 ~ "Vocational",
+                    y9_vocdeg2 == 1 ~ "Vocational",
+                    y9_vocdeg3 == 1 ~ "Vocational",
+                    y9_vocdeg4 == 1 ~ "Vocational",
+                    y9_vocdeg5 == 1 ~ "Academic",
+                    y9_vocdeg6 == 1 ~ "Academic",
+                    y9_vocdeg7 == 1 ~ "Academic",
+                    y9_vocdeg8 == 1 ~ "Academic",
+                    TRUE ~ y9_hgendeg
+                    )),
+        
+        # Releveling the y9_hgendeg variable to respondents without a migration background as the reference category.  
+          y9_hgendeg = relevel(y9_hgendeg,
+                                 ref = "Academic"
+                                 )
+          ) |>
+    # Grouping by parental social class, gender, migration background, and educational track to build the intersectional strata for the main models.
+    group_by(y9_hisei, y9_sex, y9_generationG, y9_hgendeg) |>
+    mutate(strata = cur_group_id(),
+           # Creating a variable with strata counts for descriptive statistics and data visualisation after modelling with MAIHDA.
+           count = n()) |>
+    ungroup() |>
+    # Grouping by parental social class, gender, migration background, and educational track to build the intersectional strata for the robustness checks.
+    group_by(y9_hisei, y9_sex, y9_generation3, y9_hgendeg) |>
+    mutate(strata_rob = cur_group_id(),
+           # Creating a variable with strata counts for descriptive statistics and data visualisation after modelling with MAIHDA.
+           count_rob = n()) |>
+      ungroup() |>
+    # Dropping all variables recording post-secondary educational pathways with a custom regular expression.
+  select(-matches("^y9_vocdeg[1-8]$"))
+  })
+```
+
+The original version of the 50 multiply imputed main analytic samples is removed.
+
+```{r, include = FALSE}
+# Removing the original version of the 50 multiply imputed main analytic samples to keep the environment clean.
+rm(imp)
+
+# Releasing the unused memory to keep the environment clean.
+gc()
+```
+
+Lastly, category building is then applied to the long format version of the 50 multiply imputed analytic samples (post-imputation), without specifying the intersectional strata for the main models and robustness checks, since the `imp_desc` object will be utilised only for showing descriptive statistics.
+
+```{r}
+# Dropping all auxiliary variables and keeping only outcome and strata building variables necessary for intersectional MAIHDA.
+
+imp_desc <- imp_desc |> select(
+  .imp, .id, y9_w_cont4, y9_w_incCS,
+  y9_hisei, y9_sex, y9_generationG, y9_hgendeg) |>
+  # Recreating personal IDs to join information on post-secondary educational tracks in the main analytic sample (post-imputation, long format).
+  rowwise() |> mutate(pid = cur_group_id()) |>
+    relocate(pid) |> ungroup() |> left_join(
+      read_dta("Data/CILS4EU-DE/Stata/w9_ym_ge_v7.0.0_rv.dta") |>
+        select(y9_csit4H, y9_vocdeg1, y9_vocdeg2, y9_vocdeg3, y9_vocdeg4,
+               y9_vocdeg5, y9_vocdeg6, y9_vocdeg7, y9_vocdeg8) |>
+        # Keeping only the respondents contained in the main analytic sample (post-imputation, long format).
+        filter(y9_csit4H == 4) |> select(-y9_csit4H) |>
+        rowwise() |> mutate(pid = cur_group_id()) |>
+        relocate(pid) |> ungroup(), by = "pid") |> mutate(
+          
+        # Trasforming level of income (categorical) into total amount of monthly net income in euros (continuous).
+          y9_w_cont4 = case_when(
+            y9_w_cont4 == "No contract" |
+              y9_w_cont4 == "Temporary contract" |
+              y9_w_cont4 == "Temporary contract for seasonal work" ~ 0,
+            y9_w_cont4 == "Permanent contract" ~ 1,
+            TRUE ~ as.numeric(y9_w_cont4)
+        ),
+        
+        # Trasforming level of income (categorical) into total amount of monthly net income in euros (continuous).
+        y9_w_incCS = as.numeric(y9_w_incCS),
+        y9_w_incCS = case_when(
+            y9_w_incCS == 1 ~ 100,
+            y9_w_incCS == 2 ~ 300,
+            y9_w_incCS == 3 ~ 500,
+            y9_w_incCS == 4 ~ 700,
+            y9_w_incCS == 5 ~ 900,
+            y9_w_incCS == 6 ~ 1100,
+            y9_w_incCS == 7 ~ 1300,
+            y9_w_incCS == 8 ~ 1500,
+            y9_w_incCS == 9 ~ 1700,
+            y9_w_incCS == 10 ~ 1900,
+            y9_w_incCS == 11 ~ 2100,
+            TRUE ~ y9_w_incCS
+        ),
+        
+        # Trasforming highest parental ISEI (continuous) into parental social class (categorical).`
+        y9_hisei = cut(
+            y9_hisei,
+            breaks = c(10, 40.67, 63.34, 90),
+            labels = c("Lower-class", "Middle-class", "Upper-class"),
+            include.lowest = TRUE
+        ),
+        
+        # Collapsing generational status into the migration background, foreign- or native- born variable for the robustness checks.
+        
+        # Please not that "Yes" (has a migration background) and "No" (does not have a migration background) are placeholders for avoiding overly long (and thus difficult to handle) coefficient names.
+        
+        y9_generation3 = fct_collapse(y9_generationG,
+                                      "Yes, foreign-born" = c(
+                                        "1.25th generation",
+                                        "1.5th generation",
+                                        "1.75th generation",
+                                    "1st generation, missing migration age"
+                                      ),
+                                      
+                                      "Yes, native-born" = c(
+                                        "2nd generation",
+                                        "2.5th generation",
+                                        "2.75th generation",
+                                        "Interethnic 2nd generation",
+                                        "3rd generation",
+                                        "3.25th generation",
+                                        "3.5th generation",
+                                      "Interethnic 3rd generation",
+                                        "3.75th generation"
+                                      ),
+                                      
+                                      "No, native-born" = "Native"
+                                  ),
+        
+        # Releveling the y9_generation3 variable to set native-born respondents without a migration background as the reference category.
+        y9_generation3 = fct_relevel(y9_generation3,
+                                      "No, native-born",
+                                      "Yes, native-born",
+                                      "Yes, foreign-born"
+                                      ),
+
+                # Collapsing generational status into the migration background variable for the main models.
+        
+        # Please not that "Yes" (has a migration background) and "No" (does not have a migration background) are placeholders for avoiding overly long (and thus difficult to handle) coefficient names.
+        
+        y9_generationG = fct_collapse(y9_generationG,
+                                      "Yes" = c(
+                                        "1.25th generation",
+                                        "1.5th generation",
+                                        "1.75th generation",
+                                  "1st generation, missing migration age",
+                                        "2nd generation",
+                                        "2.5th generation",
+                                        "2.75th generation",
+                                        "Interethnic 2nd generation",
+                                        "3rd generation",
+                                        "3.25th generation",
+                                        "3.5th generation",
+                                      "Interethnic 3rd generation",
+                                        "3.75th generation"
+                                      ),
+                                      
+                                      "No" = "Native"
+                                  ),
+        
+        # Releveling the y9_generationG variable to set respondents without a migration background as the reference category.   
+        y9_generationG = relevel(y9_generationG,
+                                 ref = "No"
+                                 ),
+        
+        # Collapsing the secondary high school educational track variable into two categories, that is, "Vocational" and "Academic".
+        y9_hgendeg = fct_collapse(y9_hgendeg,
+                                      "Vocational" = c(
+                                        "Lower secondary school",
+                                        "Intermediate secondary school",
+                                      "Higher vocational secondary school"
+                                      ),
+                                  
+                                  "Academic" = "Upper secondary school"
+                                  ),
+        
+        # Respondents who completed vocational education and training (VET) or an apprenticeship, or earned a technical school, master craftsman, or technician degree, are reclassified in the "Vocational" track.
+        
+        # German young adults who instead achieved a diploma or any other tertiary education qualification are reclassified in the "Academic" track.
+        
+        y9_hgendeg = factor(
+          case_when(y9_vocdeg1 == 1 ~ "Vocational",
+                    y9_vocdeg2 == 1 ~ "Vocational",
+                    y9_vocdeg3 == 1 ~ "Vocational",
+                    y9_vocdeg4 == 1 ~ "Vocational",
+                    y9_vocdeg5 == 1 ~ "Academic",
+                    y9_vocdeg6 == 1 ~ "Academic",
+                    y9_vocdeg7 == 1 ~ "Academic",
+                    y9_vocdeg8 == 1 ~ "Academic",
+                    TRUE ~ y9_hgendeg
+                    )),
+        
+        # Releveling the y9_hgendeg variable to respondents without a migration background as the reference category.  
+          y9_hgendeg = relevel(y9_hgendeg,
+                                 ref = "Academic"
+                                 )
+          ) |>
+    # Dropping all variables recording post-secondary educational pathways with a custom regular expression.
+  select(-matches("^y9_vocdeg[1-8]$"))
+```
+
+The now definitive versions of the main analytic sample are saved as R data spaces, compressed with the `gzip` method.
+
+```{r}
+# Saving the now definitive versions of the main analytic sample as R data spaces, compressed with the gzip method.
+saveRDS(d, file = "Data/Many Intersections in Search of an Author/d_main",
+        compress = "gzip")
+
+saveRDS(imp_desc,
+    file = "Data/Many Intersections in Search of an Author/imp_long_main",
+    compress = "gzip")
+
+saveRDS(imp_main,
+        file = "Data/Many Intersections in Search of an Author/imp_main",
+        compress = "gzip")
+```
+
+### 4.5 ✧ Descriptive Statistics
+
+The final step is to compute and visualise descriptive statistics to report in the study's *Descriptive Statistics* and *Appendix* sections. Some custom helper functions are needed in order to appropriately generate and print the required descriptive statistics. First, `percent` is designed, a custom function returning the percentage of strata reaching a certain sample size threshold.
+
+```{r}
+# Custom function to generate the percentage of strata reaching a certain sample size threshold.
+
+# Parameters:
+# data: tibble object (from tidyverse).
+# threshold: numerical value of the threshold.
+# varname: character string containing the name of the variable to which the threshold is applied.
+
+percent <- function(data, threshold, varname) {
+  
+  # Calculating the total number of strata.
+  tot_strata <- max(data[[varname]], na.rm = TRUE) 
+  
+  # Saving the count of respondents in each stratum in a new table.
+  n_strata <- table(data[[varname]])
+  
+  # Computing the number of strata with sample size greater than or equal to the threshold.
+  gr8_strata <- sum(n_strata >= threshold)
+  
+  # Calculating the percentage of strata with sample size greater than or equal to the threshold.
+  percentage <- (gr8_strata / tot_strata) * 100 
+  
+  # Returning the percentage.
+  return(percentage)
+}
+```
+
+`percent` is then applied to each of the 50 multiply imputed analytic samples contained in `imp_main`, joining the percentages of strata with sample sizes greater than N = 10, N = 20, N = 30, N = 50, and N = 100 in the main models, generating the figures reported in *Table A1* in the Appendix.
+
+```{r}
+# Applying the function to all the 50 multiply imputed analytic samples contained in imp_main.
+
+# For each threshold, the result of the percent function, mapped on all the 50 multiply imputed analytic samples, and transformed into a tibble, is pivoted to a longer, more human readable format, and then joined with the tibble for the subsequent threshold.
+
+as_tibble(map(imp_main, ~ percent(.x, 10, "strata"))) |>
+  pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_10") |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 20, "strata"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_20"),
+    by = "dataset"
+  ) |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 30, "strata"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_30"),
+    by = "dataset"
+  ) |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 50, "strata"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_50"),
+    by = "dataset"
+  ) |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 100, "strata"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_100"),
+    by = "dataset"
+  ) |>
+  # To conclude, all percentages are rounded to the second decimal place.
+  mutate(across(c(percent_10, percent_20, percent_30,
+                  percent_50, percent_100),
+                  ~ round(as.numeric(.x), 2)))
+```
+
+`percent` is again applied to each of the 50 multiply imputed analytic samples contained in `imp_main`, joining the percentages of strata with sample sizes greater than N = 10, N = 20, N = 30, N = 50, and N = 100 in the robustness checks, generating the figures reported in *Table A6* in the Appendix.
+
+```{r}
+# Applying the function to all the 50 multiply imputed analytic samples contained in imp_main.
+
+# For each threshold, the result of the percent function, mapped on all the 50 multiply imputed analytic samples, and transformed into a tibble, is pivoted to a longer, more human readable format, and then joined with the tibble for the subsequent threshold.
+
+as_tibble(map(imp_main, ~ percent(.x, 10, "strata_rob"))) |>
+  pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_10") |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 20, "strata_rob"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_20"),
+    by = "dataset"
+  ) |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 30, "strata_rob"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_30"),
+    by = "dataset"
+  ) |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 50, "strata_rob"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_50"),
+    by = "dataset"
+  ) |>
+  inner_join(
+    as_tibble(map(imp_main, ~ percent(.x, 100, "strata_rob"))) |>
+       pivot_longer(everything(), names_to = "dataset",
+               values_to = "percent_100"),
+    by = "dataset"
+  ) |>
+  # To conclude, all percentages are rounded to the second decimal place.
+  mutate(across(c(percent_10, percent_20, percent_30,
+                  percent_50, percent_100),
+                  ~ round(as.numeric(.x), 2)))
+```
+
+Generating descriptive statistics for the 50 post-imputation analytic samples is trickier. Rubin’s rules for pooling parameter estimates among multiply imputed datasets must be implemented [@barnard_miscellanea_1999; @van_buuren_flexible_2021].
+
+This is executed by exploiting several custom helper functions provided by Dr. Ramzi W. Nahhas in his book [Introduction to Regression Methods for Public Health Using R](https://bookdown.org/rwnahhas/RMPH), which can be found [here](https://github.com/rwnahhas/RMPH_Resources/blob/main/Functions_rmph.R).
+
+All custom helper functions are adapted to the specific needs of the study. Supplementary custom helper functions computing the lower and upper bounds of the 95% confidence intervals, sourced from [this contribution](https://forum.posit.co/t/computing-confidence-intervals-with-dplyr/31868) by user `Andrea Panizza`, are also specified as `lower_ci` and `upper_ci`, respectively.
+
+```{r}
+# Custom function to generate the sample variance of the mean.
+
+# Parameters:
+# x: character string containing the name of the variable to which the function must be applied.
+
+vm <- function(x) {
+  # Calculating the sample variance of the mean.
+  var(x) / length(x)
+}
+
+# Custom function to compute and pool sample mean, standard deviation, standard errors, and 95% confidence intervals for a variable across multiply imputed datasets using Rubin's rules.  
+
+# Parameters:
+# imp: mids object (from mice).
+# x: character string containing the name of the variable to which the function must be applied.
+
+mi.mean.se.sd <- function(imp, x) {
+  
+  # Converting the mids object into the long format.
+  impdat <- complete(imp, "long")
+  impdat$.x <- impdat[[x]]
+
+  # Computing descriptive statistics within each imputation.
+  mean <- tapply(impdat$.x, impdat$.imp, mean)
+  var.mean <- tapply(impdat$.x, impdat$.imp, vm)
+  sd <- tapply(impdat$.x, impdat$.imp, sd)
+  
+  # Applying Rubin's rules for pooling descriptive statistics across imputations.
+  pooled <- pool.scalar(Q = mean, U = var.mean, n = nrow(imp$data))
+  
+  # Computing and saving the mean, standard error, standard deviation, and lower and upper bounds of the 95% confidence interval as a tibble.
+  out <- tibble(
+    variable = x,
+    mean = pooled$qbar,
+    se = sqrt(pooled$t),
+    sd = mean(sd),
+    n = nrow(imp$data),
+    lowerci = mean - qt(1 - ((1 - 0.95) / 2), n - 1) * se,
+    upperci = mean + qt(1 - ((1 - 0.95) / 2), n - 1) * se) |>
+    # Appropriately reordering the descriptive statistics.
+    relocate(variable, mean, lowerci, upperci, sd) |>
+    # All descriptive statistics are rounded to the second decimal place.
+    mutate(across(c(mean, lowerci, upperci, sd),
+                  ~ round(.x, 2))) |> select(-se, -n)
+  
+  # Returning the tibble with the descriptive statistics.
+  return(out)
+}
+
+# Custom functions to calculate the upper and lower bounds of the 95% confidence interval for a given numeric variable.
+
+# Parameters:
+# mean: mean of the given numeric variable.
+# se: standard error for the given numeric variable.
+# n: character string containing the name of the variable to which the function must be applied.
+# conf_level: confidence level of the confidence interval, set to 95% (0.95) as default.
+
+# Lower bound of the 95% confidence interval.
+lower_ci <- function(mean, se, n, conf_level = 0.95){
+  lower_ci <- mean - qt(1 - ((1 - conf_level) / 2), n - 1) * se
+}
+
+# Custom function to calculate within-category and tot confidence interval for a given numeric variable.
+
+# Parameters:
+# mean: mean of the given numeric variable.
+# se: standard error for the given numeric variable.
+# n: character string containing the name of the variable to which the function must be applied.
+# conf_level: confidence level of the confidence interval, set to 95% (0.95) as default.
+
+# Upper bound of the 95% confidence interval.
+upper_ci <- function(mean, se, n, conf_level = 0.95){
+  upper_ci <- mean + qt(1 - ((1 - conf_level) / 2), n - 1) * se
+}
+```
+
+The last piece of the puzzle is the `calcdesc` custom helper function, which serves the purpose of computing pre-imputation means, standard deviations, and 95% confidence intervals, as well as the number and % of missing values, for the outcome variables across social groups defined by parental social class, gender, migration background, and educational track. Since these operations are executed on the non-imputed main analytic sample, pooling the estimations is not required.
+
+```{r}
+# Custom function to compute pre-imputation means, standard deviations, and 95% confidence intervals, as well as the number and % of missing values, for the outcome variables across social groups defined by parental social class, gender, migration background, and educational track.
+
+# Parameters:
+# d: tibble object (from tidyverse).
+# numvar: character string containing the name of the outcome variable to which the function must be applied.
+# catvar: character string containing the name of the intersectional strata variable to which the function must be applied.
+
+calcdesc <- function(d, numvar, catvar) {
+  
+  total = nrow(d)  # Calculating the total number of rows.
+  
+  # If no intersectional strata variable, but the string "Total", is specified, then no grouping is applied and descriptive statistics are computed on the entire analytic sample.
+  if(catvar == "Total")
+  {
+    d |>
+    summarize(
+      mean = mean(.data[[numvar]], na.rm = TRUE), # Mean.
+      sd = sd(.data[[numvar]], na.rm = TRUE), # Standard deviation.
+      count = n(), # Total count of the outcome variable.
+      # Total count of missings of the outcome variable.
+      missing = sum(is.na(.data[[numvar]])),
+      # Total percentage of missings of the outcome variable.
+      percmissing = (missing / total) * 100
+    ) |>
+    mutate(
+      # No category is indicated because descriptive statistics are computed on the entire analytic sample.
+      category = NA,
+      se = sd / sqrt(count), # Standard error.
+      lowerci = lower_ci(mean, se, count), # Lower confidence interval.
+      upperci = upper_ci(mean, se, count), # Upper confidence interval.
+      # Specifying that descriptive statistics are computed on the "Total".
+      variable = catvar
+    ) |>
+      select(-se) |> # Dropping the standard error.
+      # Reordering the table of descriptives.
+      relocate(variable, category, count, mean, lowerci, upperci) |>
+      # Figures are rounded to the second decimal place.
+      mutate(across(c(mean, sd, missing, percmissing, lowerci, upperci),
+                  ~ round(.x, 2)))
+  }
+  
+  # Otherwise, descriptive statistics are computed across the categories of the specified intersectional strata variable.
+  else{
+    d |>
+    group_by(!!sym(catvar)) |>
+    summarize(
+      mean = mean(.data[[numvar]], na.rm = TRUE), # Mean.
+      sd = sd(.data[[numvar]], na.rm = TRUE), # Standard deviation.
+      count = n(), # Between-category count of the outcome variable.
+      # Between-category count of missings of the outcome variable.
+      missing = sum(is.na(.data[[catvar]])), 
+      # Between-category percentage of missings of the outcome variable.
+      percmissing = (missing / total) * 100
+    ) |>
+    mutate(
+      se = sd / sqrt(count), # Standard error.
+      lowerci = lower_ci(mean, se, count), # Lower confidence interval.
+      upperci = upper_ci(mean, se, count), # Upper confidence interval.
+      variable = catvar # Clarifying that descriptive statistics are computed on a specific intersectional strata variable.
+    ) |>
+      ungroup() |>
+      select(-se) |> # Dropping the standard error.
+      # Indicating categories on which descriptive statistics are computed.
+      rename(category = !!sym(catvar)) |>
+      # Reordering the table of descriptives.
+      relocate(variable, category, count, mean, lowerci, upperci) |>
+      # Figures are rounded to the second decimal place.
+      mutate(across(c(mean, sd, missing, percmissing, lowerci, upperci),
+                  ~ round(.x, 2)))
+  }
+}
+```
+
+`calcdesc` is now applied to the main analytic sample (pre-imputation) contained in `d`, binding between-category and total means, standard deviations, 95% confidence intervals, and % of missing values for *probability of being employed under a permanent contract*, generating the descriptive statistics reported in *Table 1*.
+
+```{r}
+# Binding between-category and total means, standard deviations, 95% confidence intervals, and % of missing values for probability of being employed under a permanent contract.
+
+rbind(
+  calcdesc(d, numvar = "y9_w_cont4", catvar = "y9_hisei"),
+  calcdesc(d, numvar = "y9_w_cont4", catvar = "y9_sex"),
+  calcdesc(d, numvar = "y9_w_cont4", catvar = "y9_generationG"),
+  calcdesc(d, numvar = "y9_w_cont4", catvar = "y9_generation3"),
+  calcdesc(d, numvar = "y9_w_cont4", catvar = "y9_hgendeg"),
+  calcdesc(d, numvar = "y9_w_cont4", catvar = "Total")
+) |>
+  # Setting descriptive statistics for the rows containing counts and percentages of missings as NA.
+  mutate(
+    across(
+      mean:sd,
+      ~ case_when(
+          variable != "Total" & is.na(category) == TRUE ~ NA, 
+          TRUE ~ .x  # Keep the original values otherwise.
+        )
+    ),
+    
+    # Setting the category name for the rows containing counts and percentages of missings as "Missing".
+    category = case_when(
+      variable != "Total" & is.na(category) == TRUE ~ "Missing",
+      TRUE ~ category # Keep the original values otherwise.
+      ),
+    
+    # The count parameter is redundant as it contains the number of missings in the rows containing counts and percentages of missings. Thus, it is set to NA.
+    count = case_when(
+      category == "Missing" ~ NA,
+      TRUE ~ count # Keep the original values otherwise.
+    )
+  )
+```
+
+`calcdesc` is then applied to the main analytic sample (pre-imputation) contained in `d`, binding within-category and total means, standard deviations, 95% confidence intervals, and % of missing values for *monthly net income*, generating the descriptive statistics reported in *Table 2*.
+
+```{r}
+# Binding between-category and total means, standard deviations, 95% confidence intervals, and % of missing values for monthly net income.
+
+rbind(
+  calcdesc(d, numvar = "y9_w_incCS", catvar = "y9_hisei"),
+  calcdesc(d, numvar = "y9_w_incCS", catvar = "y9_sex"),
+  calcdesc(d, numvar = "y9_w_incCS", catvar = "y9_generationG"),
+  calcdesc(d, numvar = "y9_w_incCS", catvar = "y9_generation3"),
+  calcdesc(d, numvar = "y9_w_incCS", catvar = "y9_hgendeg"),
+  calcdesc(d, numvar = "y9_w_incCS", catvar = "Total")
+) |>
+  # Setting descriptive statistics for the rows containing counts and percentages of missings as NA.
+  mutate(
+    across(
+      mean:sd,
+      ~ case_when(
+          variable != "Total" & is.na(category) == TRUE ~ NA, 
+          TRUE ~ .x  # Keep the original values otherwise.
+        )
+    ),
+    
+    # Setting the category name for the rows containing counts and percentages of missings as "Missing".
+    category = case_when(
+      variable != "Total" & is.na(category) == TRUE ~ "Missing",
+      TRUE ~ category # Keep the original values otherwise.
+    ),
+    
+    # The count parameter is redundant as it contains the number of missings in the rows containing counts and percentages of missings. Thus, it is set to NA.
+    count = case_when(
+      category == "Missing" ~ NA,
+      TRUE ~ count # Keep the original values otherwise.
+    )
+  )
+```
+
+The custom function `mi.mean.se.sd` is only applicable to `mids` objects. Therefore, the long format `imp_desc` tibble, containing the 50 post-imputation analytic samples, is converted to the `mids` format. All factors are converted to numeric variables to allow for pooling with Rubin's rules.
+
+```{r}
+# When being converted to numeric variables, factors have their reference categories set to 1 as their defaults. Since the aim is to compute descriptive statistics, reference categories must be set to 0.
+
+imp_mids <- as.mids(imp_desc |>
+                    mutate_if(is.factor, ~as.numeric(.) - 1),
+                    .imp = ".imp", .id = ".id"
+                    )
+```
+
+`mi.mean.se.sd` is now applied to the `imp_mids` object containing all of the 50 multiply imputed analytic samples, binding means, standard deviations, 95% confidence intervals for all outcome and intersectional strata variables, generating the descriptive statistics reported in *Table A2* in the Appendix.
+
+```{r}
+# Binding means, standard deviations, 95% confidence intervals for all outcome and intersectional strata variables for the 50 post-imputation analytic samples.
+
+rbind(
+  mi.mean.se.sd(imp_mids, "y9_w_cont4"),
+  mi.mean.se.sd(imp_mids, "y9_w_incCS"),
+  mi.mean.se.sd(imp_mids, "y9_hisei"),
+  mi.mean.se.sd(imp_mids, "y9_sex"),
+  mi.mean.se.sd(imp_mids, "y9_generationG"),
+  mi.mean.se.sd(imp_mids, "y9_generation3"),
+  mi.mean.se.sd(imp_mids, "y9_hgendeg")
+)
+```
+
+`micombine.cor` is now applied to the `imp_mids` object containing all of the 50 multiply imputed analytic samples, binding intercorrelations and 95% confidence intervals between all outcome and intersectional strata variables, generating the descriptive statistics reported in *Table A2* in the Appendix.
+
+```{r}
+# Generating a tibble with intercorrelations and 95% confidence intervals between all outcome and intersectional strata variables for the 50 post-imputation analytic samples.
+
+as_tibble(micombine.cor(imp_mids,
+                        variables = c(2:8),
+                        conf.level = 0.95,
+                        method = "pearson",
+                        nested = FALSE,
+                        partial = NULL)) |>
+  # Reordering the descriptive table.
+  select(variable1, variable2, r, lower95, upper95) |>
+  group_by(r) |> slice_head() |> ungroup() |>
+  # Arranging the descriptive table by descending alphabetical order.
+  arrange(desc(variable1), desc(variable2))
+```
+
+To conclude, the environment is cleaned from all remaining objects, and references are specified in a supplementary section. References will be sourced and printed from the `manyintersections.bib` file, and formatted with the *APA 7th Edition* style, drawn from `apa.csl`, when the Quarto project is compiled via `tinytex`.
+
+```{r, include = FALSE}
+# Removing all custom helper functions.
+rm(percent, calcdesc, lower_ci, upper_ci, vm, mi.mean.se.sd)
+
+# Removing all versions of the analytic sample.
+rm(d, imp_main, imp_desc, imp_mids)
+
+# Releasing the unused memory to keep the environment clean.
+gc()
+```
+
+## 5. References
+
+::: {#refs}
+:::
